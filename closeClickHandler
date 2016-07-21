@@ -1,0 +1,307 @@
+vui.provide("vui.ui.editor.internal");
+vui.require("vui.auth");
+vui.ui.editor.internal = {
+    NEW_EDITOR_ID: "vui-editor-object-new-",
+    CLONE_EDITOR_ID: "vui-editor-object-new-clone-",
+    newEditorIndex: 0,
+    editors: {},
+    widgetValueCache: {},
+    addWidgetValueCache: function(_1a2, id) {
+        this.widgetValueCache[id] = this.widgetValueCache[id] || {};
+        this.widgetValueCache[id][_1a2.getDataId()] = _1a2;
+    },
+    getWidgetValueCache: function(_1a4, id) {
+        if (!this.widgetValueCache[id]) {
+            return null;
+        }
+        return this.widgetValueCache[id][_1a4];
+    },
+    removeWidgetValueCache: function(_1a6, id) {
+        if (!this.widgetValueCache[id]) {
+            return null;
+        }
+        delete this.widgetValueCache[id][_1a6.getDataId()];
+    },
+    getWidgetValueData: function(id) {
+        if (!this.widgetValueCache[id]) {
+            return null;
+        }
+        var _1a9 = {};
+        for (var item in this.widgetValueCache[id]) {
+            var _1ab = this.getWidgetValueCache(item, id);
+            _1a9[item] = _1ab.getDataValue();
+        }
+        return _1a9;
+    },
+    add: function(_1ac) {
+        this.editors[_1ac.id] = _1ac;
+    },
+    remove: function(id) {
+        delete this.editors[id];
+    },
+    find: function(id) {
+        return this.editors[id];
+    },
+    save: function(type, _1b0, _1b1, id, data, _1b4) {
+        var e = vui.ui.editor;
+        _1b4 = _1b4 || {};
+        _1b4.content = data;
+        _1b4.content[e.TYPE_ATTRIBUTE] = type;
+        _1b4.content[e.TYPE_ID_ATTRIBUTE] = _1b0;
+        _1b4.content[e.TYPE_XML_NAME_ATTRIBUTE] = vui.html.escape(_1b1);
+        _1b4.content[e.ID_ATTRIBUTE] = id;
+        _1b4.actionKey = e.ACTION_KEY;
+        _1b4.method = e.SAVE;
+        var _1b6 = vui.request.build(_1b4);
+        vui.io.api(_1b6);
+    },
+    buildButtonHandler: function(type, id, _1b9) {
+        return function(_1ba) {
+            _1b9(type, id, _1ba);
+        };
+    },
+    buildButtons: function(type, _1bc, _1bd, tbar, _1bf, _1c0) {
+        var obj = _1bc.object || {
+            type: type
+        };
+        if (_1c0 === true && _1bd.length > 0) {
+            tbar.add({
+                xtype: "tbseparator"
+            });
+        }
+        var _1c2 = function(_1c3, _1c4) {
+            var _1c5 = function(_1c6, _1c7) {
+                if (_1c7.type === vui.ui.editor.event.SUSPEND) {
+                    if (_1c3 && typeof _1c3.vuiSuspend === "function") {
+                        _1c3.vuiSuspend();
+                    }
+                } else {
+                    if (_1c7.type === vui.ui.editor.event.RESUME) {
+                        if (_1c3 && typeof _1c3.vuiResume === "function") {
+                            _1c3.vuiResume();
+                        }
+                    }
+                }
+            };
+            _1c3.on("afterrender", function() {
+                vui.ui.editor.event.subscribe(_1c4, _1c5);
+            });
+            _1c3.on("destroy", function() {
+                vui.ui.editor.event.unsubscribe(_1c4, _1c5);
+            });
+        };
+        for (var i = 0; i < _1bd.length; ++i) {
+            var _1c9 = _1bd[i];
+            var _1ca = {
+                disabled: _1bf || _1c9.disabled,
+                text: _1c9.getTitle(_1bc, obj),
+                id: _1bc.id + "-" + _1c9.id,
+                cls: _1c9.getButtonClass(_1bc, obj),
+                iconCls: _1c9.getIconClass(_1bc, obj),
+                handler: this.buildButtonHandler(type, _1bc.id, _1c9.clickHandler),
+                tooltip: _1c9.getTooltip(_1bc, obj)
+            };
+            vui.combine(_1ca, _1c9.getAdditionalConfig(type, _1bc));
+            var _1cb = _1c9.getButtonJSClass() || "vui.vext.Button";
+            var _1cc = vui.ext.create(_1cb, _1ca);
+            _1c2(_1cc, _1bc.id);
+            if (_1c9.setupButton) {
+                _1c9.setupButton(type, _1bc, _1cc);
+            }
+            tbar.add(_1cc);
+        }
+    },
+    getUpdateFunction: function(_1cd, _1ce, _1cf) {
+        var _1d0 = function(ui, _1d2, data) {
+            var ed = vui.ui.editor;
+            _1d2.clearBlock();
+            _1d2.setUI(ui);
+            _1d2.setCloseCallback(_1cd.closeCallback);
+            _1d2.setSaveCallback(_1cd.saveCallback);
+            _1d2.showBlock();
+            _1d2.updateContent(data);
+            var _1d5 = _1d2.isReadOnly();
+            var _1d6 = _1d5;
+            if (vui.ui.editor.isNewEditorId(_1d2.id)) {
+                _1d6 = true;
+                _1cd.skipDate = true;
+            }
+            var _1d7 = null;
+            tbar = ui.getDockedComponent("topToolbar");
+            var ei = ed.internal;
+            var _1d9 = _1cd.editorChrome == vui.ui.editor.DEFAULT_EDITOR_CHROME;
+            var _1da = _1cd.editorChrome == vui.ui.editor.SECONDARY_EDITOR_CHROME;
+            if (_1d9 && !_1cd.skipToolbar) {
+                var eb = ed.button;
+                tbar.addCls(ed.CONTENT_TOOLBAR_CLS);
+                if (_1cd.toolbarBuilder) {
+                    _1cd.toolbarBuilder(_1d2.id, tbar, _1cf);
+                } else {
+                    if (_1d2.toolbarProperties !== false) {
+                        var _1dc = eb.properties.get();
+                        var _1dd = _1d2.cloneId;
+                        ei.buildButtons(_1cd.type, _1d2, [_1dc], tbar, _1dd && _1dd.length > 0);
+                        tbar.add({
+                            xtype: "tbseparator"
+                        });
+                        var _1de = false;
+                        if (_1d2.multilingual) {
+                            var _1df = eb.translations.get();
+                            ei.buildButtons(_1cd.type, _1d2, [_1df], tbar, _1dd && _1dd.length > 0);
+                            _1de = true;
+                        }
+                        var _1e0 = _1d2.object && _1d2.object.language ? _1d2.object.language.flagPath : null;
+                        if (_1e0) {
+                            var _1e1 = _1d2.object.language.name || "";
+                            tbar.add([{
+                                xtype: "tbitem",
+                                autoEl: {
+                                    tag: "img",
+                                    cls: ed.FLAG_ICON_CLS,
+                                    src: _1e0,
+                                    "title": _1e1
+                                }
+                            }]);
+                            _1de = true;
+                        }
+                        if (_1d2.multilingual && _1d2.object && _1d2.object.sharableTranslation) {
+                            tbar.add([{
+                                xtype: "tbitem",
+                                autoEl: {
+                                    tag: "span",
+                                    cls: ed.MASTER_ICON_CLS,
+                                    "title": vui.ui.editor.getMessage("master.icon.title")
+                                }
+                            }]);
+                            _1de = true;
+                        }
+                        if (_1de) {
+                            tbar.add({
+                                xtype: "tbseparator"
+                            });
+                        }
+                    }
+                }
+                if (!_1cd.skipType) {
+                    tbar.add({
+                        xtype: "tbfill"
+                    });
+                    ei.buildButtons(_1cd.type, _1d2, eb.getButtons(_1cd.type, _1cd.objectTypeXmlName), tbar, _1d6, true);
+                }
+                if (!_1cd.skipSave) {
+                    if (_1cd.skipType) {
+                        tbar.add({
+                            xtype: "tbfill"
+                        });
+                    }
+                    tbar.add({
+                        xtype: "tbseparator"
+                    });
+                    var _1e2 = [vui.ui.editor.button.save.getSave(_1d5), vui.ui.editor.button.save.getClose(_1d5)];
+                    ei.buildButtons(_1cd.type, _1d2, _1e2, tbar, false);
+                }
+                if (!_1d2.hidden && (tbar.items.length > 0)) {
+                    tbar.doLayout();
+                    tbar.show();
+                    if (_1d7) {
+                        _1d7.doLayout();
+                        _1d7.show();
+                    }
+                } else {
+                    tbar.hide();
+                }
+            } else {
+                tbar.hide();
+            }
+            var fbar = _1d2.getFooterToolbar();
+            if (_1da && !_1cd.skipFooterBar) {
+                if (!fbar) {
+                    fbar = vui.ext.create(vui.extRootName + ".toolbar.Toolbar", {
+                        dock: "bottom",
+                        itemId: "bottomToolbar",
+                        ui: "footer",
+                        id: ed.CONTENT_FOOTERBAR_ID + "-" + _1d2.id,
+                        cls: ed.CONTENT_SECONDARY_TOOLBAR_CLS,
+                        items: [{
+                            hidden: true
+                        }]
+                    });
+                    ui.dockedItems.add(fbar);
+                }
+                fbar.addCls(ed.CONTENT_FOOTERBAR_CLS);
+                if (_1cd.footerbarBuilder) {
+                    _1cd.footerbarBuilder(_1d2.id, fbar, _1cf);
+                }
+                fbar.add({
+                    xtype: "tbfill"
+                });
+                if (!_1cd.skipOkCancel) {
+                    _1e2 = [vui.ui.editor.button.save.getOk(_1d5), vui.ui.editor.button.save.getCancel()];
+                    ei.buildButtons(_1cd.type, _1d2, _1e2, fbar, false);
+                }
+                if (!_1d2.hidden && (fbar.items.length > 0)) {
+                    var _1e4 = _1d2.getBottomToolbar();
+                    if (_1e4) {
+                        _1e4.hide();
+                    }
+                    fbar.doLayout();
+                    fbar.show();
+                } else {
+                    fbar.hide();
+                }
+            } else {
+                if (fbar) {
+                    fbar.hide();
+                }
+            }
+            var bbar = ui.getDockedComponent("bottomToolbar");
+            if (bbar) {
+                if (bbar.items.length > 0) {
+                    bbar.addCls(ed.CONTENT_TOOLBAR_CLS);
+                    if (bbar.rendered) {
+                        bbar.setHeight(bbar.getHeight());
+                    }
+                    bbar.doLayout();
+                    bbar.show();
+                } else {
+                    if (!fbar || (fbar.items.length === 0)) {
+                        if (!(bbar.items.length === 0)) {
+                            bbar.hide();
+                        }
+                    }
+                }
+            }
+            ui.doLayout();
+            ui.setSize(ui.getSize());
+            _1d2.getContentComponent().forceComponentLayout();
+            if (!_1cd.skipDate && _1d2.object) {
+                _1d2.setTime(_1d2.object.lastModificationTime);
+            }
+            _1d2.clearBlock();
+            if (_1ce) {
+                _1ce(data, _1d2, ui);
+            }
+            if (_1cd.extraSetup) {
+                _1cd.extraSetup(_1d2, _1cd);
+            }
+            var _1e6 = new vui.ui.editor.Event({
+                type: vui.ui.editor.event.LOAD,
+                object: _1d2
+            });
+            vui.publish(vui.ui.editor.event.TOPIC_ROOT + _1d2.id, _1e6);
+        };
+        return _1d0;
+    },
+    authListener: function(_1e7, _1e8) {
+        if (_1e8.type !== vui.auth.event.INVALIDATE) {
+            return;
+        }
+        var ei = vui.ui.editor.internal;
+        for (var id in ei.editors) {
+            var _1eb = ei.find(id);
+            if (_1eb) {
+                _1eb.close(true);
+            }
+        }
+    }
+}
